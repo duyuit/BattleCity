@@ -1,13 +1,15 @@
-#include "HelloWorldScene.h"
+﻿#include "HelloWorldScene.h"
 #include "SimpleAudioEngine.h"
+#include "proj.win32/Tank.h"
 
 USING_NS_CC;
+#define SCALE_RATIO 32.0
+
 
 Scene* HelloWorld::createScene()
 {
     // 'scene' is an autorelease object
     auto scene = Scene::create();
-    
     // 'layer' is an autorelease object
     auto layer = HelloWorld::create();
 
@@ -36,60 +38,122 @@ bool HelloWorld::init()
     //    you may modify it.
 
     // add a "close" icon to exit the progress. it's an autorelease object
-    auto closeItem = MenuItemImage::create(
-                                           "CloseNormal.png",
-                                           "CloseSelected.png",
-                                           CC_CALLBACK_1(HelloWorld::menuCloseCallback, this));
-    
-    closeItem->setPosition(Vec2(origin.x + visibleSize.width - closeItem->getContentSize().width/2 ,
-                                origin.y + closeItem->getContentSize().height/2));
+	auto _tileMap = new TMXTiledMap();
+	//Khai bao Map
+	{
+		_tileMap->setPosition(Vec2(0,visibleSize.height));
+		_tileMap->setAnchorPoint(Vec2(0,1));
+		_tileMap->initWithTMXFile("untitled.tmx");
+		_tileMap->getLayer("Tile Layer 1")->setGlobalZOrder(2);
+		this->addChild(_tileMap);
+	} 
 
-    // create menu, it's an autorelease object
-    auto menu = Menu::create(closeItem, NULL);
-    menu->setPosition(Vec2::ZERO);
-    this->addChild(menu, 1);
+	b2Vec2 gravity = b2Vec2(0.0f, 0.0f); // Vector gia tốc ( dấu - là chỉ hướng xuống, vì trục y hướng lên trên)
+	world = new b2World(gravity); // Tạo world với vector gia tố
 
-    /////////////////////////////
-    // 3. add your codes below...
+	a = new Tank(world);
+	this->addChild(a,2);
+	addWallFromMap(_tileMap);
 
-    // add a label shows "Hello World"
-    // create and initialize a label
-    
-    auto label = Label::createWithTTF("Hello World", "fonts/Marker Felt.ttf", 24);
-    
-    // position the label on the center of the screen
-    label->setPosition(Vec2(origin.x + visibleSize.width/2,
-                            origin.y + visibleSize.height - label->getContentSize().height));
 
-    // add the label as a child to this layer
-    this->addChild(label, 1);
+	auto eventListener = EventListenerKeyboard::create();
+	eventListener->onKeyPressed = [=](EventKeyboard::KeyCode keyCode, Event* event) {
+		keys[keyCode] = true;
+	};
+	eventListener->onKeyReleased = [=](EventKeyboard::KeyCode keyCode, Event* event) {
+		keys[keyCode] = false;
+	};
 
-    // add "HelloWorld" splash screen"
-    auto sprite = Sprite::create("HelloWorld.png");
+	this->_eventDispatcher->addEventListenerWithSceneGraphPriority(eventListener, this);
 
-    // position the sprite on the center of the screen
-    sprite->setPosition(Vec2(visibleSize.width/2 + origin.x, visibleSize.height/2 + origin.y));
 
-    // add the sprite as a child to this layer
-    this->addChild(sprite, 0);
-    
+	GLESDebugDraw* _debugDraw = new GLESDebugDraw(32.0f); // change 30 to your ptm ratio
+	_debugDraw->SetFlags(b2Draw::e_shapeBit | b2Draw::e_jointBit);
+	world->SetDebugDraw(_debugDraw);
+	this->scheduleUpdate();
     return true;
 }
 
-
-void HelloWorld::menuCloseCallback(Ref* pSender)
+void HelloWorld::update(float delta)
 {
-    //Close the cocos2d-x game scene and quit the application
-    Director::getInstance()->end();
+	a->keys = keys;
+	a->update(delta);
+	int velocityIterations = 10;   // 
+	int positionIterations = 10;   // 
 
-    #if (CC_TARGET_PLATFORM == CC_PLATFORM_IOS)
-    exit(0);
-#endif
-    
-    /*To navigate back to native iOS screen(if present) without quitting the application  ,do not use Director::getInstance()->end() and exit(0) as given above,instead trigger a custom event created in RootViewController.mm as below*/
-    
-    //EventCustom customEndEvent("game_scene_close_event");
-    //_eventDispatcher->dispatchEvent(&customEndEvent);
-    
-    
+	 // Bước thời gian
+	world->Step(delta, velocityIterations, positionIterations);
+
+	// Duyệt tất cả body của world
+	for (b2Body *body = world->GetBodyList(); body != NULL; body = body->GetNext())
+	{
+		// Xét những body có gắn vào Sprite
+		if (body->GetUserData())
+		{
+
+			// Trả về sprite quả bóng ( có mỗi sprite trong bài này )
+			Sprite *sprite = (Sprite *)body->GetUserData();
+			// Đặt lại vị trí của Sprite này theo vị trí của body ( body sẽ bị rơi dần theo time), nhớ nhân RATIO để chuyển sang tọa độ pixel
+			sprite->setPosition(Point(body->GetPosition().x * SCALE_RATIO, body->GetPosition().y * SCALE_RATIO));
+
+		}
+	}
+	for (b2Contact* contact = world->GetContactList(); contact; contact = contact->GetNext())
+	{
+
+		if (contact->GetFixtureA()->GetBody())
+			world->DestroyBody(contact->GetFixtureA()->GetBody());
+		world->Step(delta, velocityIterations, positionIterations);
+		/*contact->GetFixtureA()->GetBody()->DestroyFixture(contact->GetFixtureA());*/
+	}
+
+	
+	world->ClearForces(); // Xóa mọi áp đặt cho Body
+
 }
+void HelloWorld::addWall(float w, float h, float px, float py) {
+
+	b2PolygonShape floorShape; // Hình dạng Sàn
+
+	floorShape.SetAsBox(w / SCALE_RATIO, h / SCALE_RATIO); // Hình vuông, hoặc chữ nhật
+	b2FixtureDef floorFixture;
+
+	floorFixture.density = 0;
+	floorFixture.friction = 10;
+	floorFixture.restitution = 0.5;
+	floorFixture.shape = &floorShape;
+
+	b2BodyDef floorBodyDef;
+	floorBodyDef.type = b2_staticBody;
+	floorBodyDef.position.Set(px / SCALE_RATIO, py / SCALE_RATIO);
+
+
+	b2Body *floorBody = world->CreateBody(&floorBodyDef);
+	floorBody->CreateFixture(&floorFixture);
+}
+
+void HelloWorld::draw(Renderer* renderer, const Mat4& transform, uint32_t flags)
+{
+	Layer::draw(renderer, transform, flags);
+	world->DrawDebugData();
+}
+
+void HelloWorld::addWallFromMap(TMXTiledMap* tiled_map)
+{
+	TMXObjectGroup *objectGroup = tiled_map->getObjectGroup("Objects");
+
+
+	for (int i = 0; i<objectGroup->getObjects().size(); i++)
+	{
+
+		Value objectemp = objectGroup->getObjects().at(i);
+
+		float wi_box = objectemp.asValueMap().at("width").asFloat()/2;
+		float he_box = objectemp.asValueMap().at("height").asFloat()/2;
+		float x_box = objectemp.asValueMap().at("x").asFloat()+ wi_box;
+		float y_box = objectemp.asValueMap().at("y").asFloat()+he_box;
+		this->addWall(wi_box, he_box, x_box, y_box);
+	}
+}
+
+

@@ -21,6 +21,11 @@
     <ClCompile Include="..\Classes\HelloWorldScene.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="Tank.cpp" />
+    <ClCompile Include="GLES-Render.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="MyCollisionContact.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h">
@@ -32,6 +37,11 @@
     <ClInclude Include="..\Classes\HelloWorldScene.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="Tank.h" />
+    <ClInclude Include="GLES-Render.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="MyCollisionContact.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="game.rc">
